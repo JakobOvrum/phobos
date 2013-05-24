@@ -3301,67 +3301,59 @@ unittest
     }
 }
 
-
 /**
 Allocates a $(D class) object right inside the current scope,
 therefore avoiding the overhead of $(D new). This facility is unsafe;
 it is the responsibility of the user to not escape a reference to the
 object outside the scope.
 
+Until initialized with $(D scoped), instances of $(D Scoped) encapsulate
+a null reference.
+
 Note: it's illegal to move a class reference even if you are sure there
 are no pointers to it. As such, it is illegal to move a scoped object.
  */
-template scoped(T)
-    if (is(T == class))
+template Scoped(T) if(is(T == class))
 {
-    // _d_newclass now use default GC alignment (looks like (void*).sizeof * 2 for
-    // small objects). We will just use the maximum of filed alignments.
-    alias classInstanceAlignment!T alignment;
-    alias _alignUp!alignment aligned;
+    private enum alignment = classInstanceAlignment!T;
 
-    static struct Scoped
+    // TODO: switch to align(classInstanceAlignment!T)
+    // when that has been implemented (issue #9766).
+    mixin(`align(` ~ to!string(alignment) ~ `) struct Scoped
     {
-        // Addition of `alignment` is required as `Scoped_store` can be misaligned in memory.
-        private void[aligned(__traits(classInstanceSize, T) + size_t.sizeof) + alignment] Scoped_store = void;
+        private:
+        // Needs null-initialization for at least
+        // the first word so destroy() won't be
+        // confused if it was never initialized.
+        void[__traits(classInstanceSize, T)] Scoped_store;
 
+        public:
         @property inout(T) Scoped_payload() inout
         {
-            void* alignedStore = cast(void*) aligned(cast(size_t) Scoped_store.ptr);
-            // As `Scoped` can be unaligned moved in memory class instance should be moved accordingly.
-            immutable size_t d = alignedStore - Scoped_store.ptr;
-            size_t* currD = cast(size_t*) &Scoped_store[$ - size_t.sizeof];
-            if(d != *currD)
-            {
-                import core.stdc.string;
-                memmove(alignedStore, Scoped_store.ptr + *currD, __traits(classInstanceSize, T));
-                *currD = d;
-            }
-            return cast(inout(T)) alignedStore;
+            void** obj = cast(void**)Scoped_store.ptr;
+            void* vptr = *obj;
+
+            if(vptr)
+                return cast(inout(T))obj;
+            else
+                return null; // Instance not yet initialized.
         }
+
         alias Scoped_payload this;
 
         @disable this();
+
         @disable this(this);
 
         ~this()
         {
-            // `destroy` will also write .init but we have no functions in druntime
+            // "destroy" will also write .init but we have no functions in druntime
             // for deterministic finalization and memory releasing for now.
             .destroy(Scoped_payload);
         }
-    }
-
-    /// Returns the scoped object
-    @system auto scoped(Args...)(auto ref Args args)
-    {
-        Scoped result = void;
-        void* alignedStore = cast(void*) aligned(cast(size_t) result.Scoped_store.ptr);
-        immutable size_t d = alignedStore - result.Scoped_store.ptr;
-        *cast(size_t*) &result.Scoped_store[$ - size_t.sizeof] = d;
-        emplace!(Unqual!T)(result.Scoped_store[d .. $ - size_t.sizeof], args);
-        return result;
-    }
+    }`);
 }
+
 ///
 unittest
 {
@@ -3383,9 +3375,6 @@ unittest
     static assert(!is(typeof({
         auto e1 = a1; // illegal, scoped objects can't be copied
         assert([a2][0].x == 42); // ditto
-        alias ScopedObject = typeof(a1);
-        auto e2 = ScopedObject();  //Illegal, must be built via scoped!A
-        auto e3 = ScopedObject(1); //Illegal, must be built via scoped!A
     })));
 
     // Use with alias
@@ -3394,11 +3383,17 @@ unittest
     auto a7 = makeScopedA();
 }
 
-private size_t _alignUp(size_t alignment)(size_t n)
-    if(alignment > 0 && !((alignment - 1) & alignment))
+/**
+Construct a $(D Scoped) instance.
+ */
+template scoped(T) if(is(T == class))
 {
-    enum badEnd = alignment - 1; // 0b11, 0b111, ...
-    return (n + badEnd) & ~badEnd;
+    Scoped!T scoped(Args...)(auto ref Args args)
+    {
+        Scoped!T result = void;
+        emplace!(Unqual!T)(result.Scoped_store[], args);
+        return result;
+    }
 }
 
 unittest // Issue 6580 testcase

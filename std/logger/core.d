@@ -6,12 +6,12 @@ program. Logging should be easy, but also flexible and powerful, therefore
 $(D D) provides a standard interface for logging.
 
 The easiest way to create a log message is to write
-$(D import std.logger; log("I am here");) this will print a message to the
-$(D stdout) device.  The message will contain the filename, the linenumber, the
+$(D import std.logger; log("I am here");). This will print a message to the
+standard output pipe. The message will contain the filename, the line number, the
 name of the surrounding function, the time and the message.
 
 Copyright: Copyright Robert "burner" Schadek 2013 --
-License: <a href="http://www.boost.org/LICENSE_1_0.txt">Boost License 1.0</a>.
+License: $(WEB http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
 Authors: $(WEB http://www.svs.informatik.uni-oldenburg.de/60865.html, Robert burner Schadek)
 
 -------------
@@ -24,7 +24,7 @@ errorf("Logging %s the defaultLogger %s its error LogLevel", "to", "with");
 critical("Logging to the"," defaultLogger with its error LogLevel");
 fatal("Logging to the defaultLogger with its fatal LogLevel");
 
-auto fLogger = new FileLogger("NameOfTheLogFile");
+auto fLogger = new FileLogger("mylogfile.log");
 fLogger.log("Logging to the fileLogger with its default LogLevel");
 fLogger.info("Logging to the fileLogger with its default LogLevel");
 fLogger.warningc(5 < 6, "Logging to the fileLogger with its LogLevel.warning if 5 is less than 6");
@@ -34,63 +34,66 @@ fLogger.loglc(LogLevel.trace, 5 < 6, "Logging to the fileLogger"," with its defa
 fLogger.fatal("Logging to the fileLogger with its warning LogLevel");
 -------------
 
-Top-level calls to logging-related functions go to the default $(D Logger)
-object called $(D defaultLogger).
+Calls to top-level logging functions go to the $(D Logger)
+object $(LREF defaultLogger).
 $(LI $(D log))
 $(LI $(D trace))
 $(LI $(D info))
 $(LI $(D warning))
 $(LI $(D critical))
 $(LI $(D fatal))
-The default $(D Logger) will by default log to $(D stdout) and has a default
-$(D LogLevel) of $(D LogLevel.all). The default Logger can be accessed by
-using a property call $(D defaultLogger). This property a reference to the
-current default $(D Logger). This reference can be used to assign a new
-default $(D Logger).
+$(D defaultLogger) can be assigned to a user-specified logger instance
+to override the default logging behavior:
 -------------
-defaultLogger = new FileLogger("New_Default_Log_File.log");
+defaultLogger = new FileLogger("defaultlogfile.log");
+-------------
+Left unchanged, $(D defaultLogger) logs to the standard output pipe
+with a default $(D LogLevel) of $(D LogLevel.all).
+
+In addition to the default logger, custom logger instances can be used
+to achieve non-default logging behavior:
+-------------
+auto myLogger = new FileLogger(stderr);
+myLogger.log("This log entry is written to the standard error pipe");
+log("This log entry is written using the specified default logging behaviour");
 -------------
 
-Additional $(D Logger) can be created by creating a new instance of the
-required $(D Logger). These $(D Logger) have the same methodes as the
-$(D defaultLogger).
+The $(D LogLevel) of a log entry can be specified in one of two ways.
+The first is by calling $(D logl) (note the $(D l) suffix)
+and passing the $(D LogLevel) explicitly as the first argument.
+The second way of setting the $(D LogLevel) of a log entry is by calling any of
+$(D trace), $(D info), $(D warning), $(D critical) and $(D fatal), which
+implicitly attach their respective log level.
 
-The $(D LogLevel) of an log call can be defined in two ways. The first is by
-calling $(D logl) and passing the $(D LogLevel) explicit. Notice the
-additional $(B l) after log. The $(D LogLevel) is to be passed as first
-argument to the function. The second way of setting the $(D LogLevel) of a
-log call, is by calling either $(D trace), $(D info), $(D warning),
-$(D critical), or $(D fatal). The log call will than have the respective
-$(D LogLevel).
+Conditional logging is facilitated by the logging functions
+with the $(B c) suffix, which receive a boolean as the first argument;
+the entry is only logged when the boolean is true.
 
-Conditional logging can be achived be appending a $(B c) to the function
-identifier and passing a $(D bool) as first argument to the function.
-If conditional logging is used the condition must be $(D true) in order to
-have the log message logged.
-
-In order to combine a explicit $(D LogLevel) passing with conditional logging
-call the function or method $(D loglc). The first required argument to the
-call then becomes the $(D LogLevel) and the second argument is the $(D bool).
+Conditional logging can be combined with an explicit $(D LogLevel) by using
+the logging functions with the $(B lc) suffix, which take the $(D LogLevel) as
+the first and the logging condition as the second argument.
 
 Messages are logged if the $(D LogLevel) of the log message is greater than or
-equal to than the $(D LogLevel) of the used $(D Logger) and additionally if the
-$(D LogLevel) of the log message is greater equal to the global $(D LogLevel).
-The global $(D LogLevel) is accessible by using $(D globalLogLevel).
-To assign the $(D LogLevel) of a $(D Logger) use the $(D logLevel) property of
-the logger.
+equal to the $(D LogLevel) of the $(D Logger) used, and additionally if the
+$(D LogLevel) of the log message is greater or equal to the global $(D LogLevel).
+The global $(D LogLevel) is accessible through $(LREF globalLogLevel).
+The $(D LogLevel) of individual loggers can be accessed through the $(D logLevel)
+property.
 
-If $(D printf)-style logging is needed add a $(B f) to the logging call, such as
-$(D myLogger.infof("Hello %s", "world");) or $(fatalf("errno %d", 1337))
-The additional $(B f) enables $(D printf)-style logging for call combinations of
-explicit $(D LogLevel) and conditional logging functions and methods. The
-$(B f) is always to be placed last.
+$(D printf)-style formatted logging is supported by the logging functions with
+the $(B f) suffix:
+-------------
+myLogger.infof("Hello %s", "world");
+fatalf("errno %d", 1337);
+-------------
+When combined with conditional logging and/or logging with an
+explicit $(D LogLevel), the $(B f) suffix is always placed last.
 
-To customize the logger behaviour, create a new $(D class) that inherits from
-the abstract $(D Logger) $(D class), and implements the $(D writeLogMsg)
-method.
+To implement a custom logger, implement the $(D writeLogMsg) method
+of $(D Logger):
 -------------
 class MyCustomLogger : Logger {
-    override void writeLogMsg(ref LoggerPayload payload))
+    override void writeLogMsg(ref LoggerPayload payload)
     {
         // log message in my custom way
     }
@@ -100,19 +103,19 @@ auto logger = new MyCustomLogger();
 logger.log("Awesome log message");
 -------------
 
-Even though the idea behind this logging module is to provide a common
-interface and easy extensibility certain specific Logger are already
-implemented.
 
-$(LI StdIOLogger = This $(D Logger) logs data to $(D stdout).)
-$(LI FileLogger = This $(D Logger) logs data to files.)
-$(LI MulitLogger = This $(D Logger) logs data to multiple $(D Logger).)
-$(LI NullLogger = This $(D Logger) will never do anything.)
-$(LI TemplateLogger = This $(D Logger) can be used to create simple custom
-$(D Logger).)
+While the idea behind this logging module is to provide a common
+interface and easy extensibility, these logger implementations
+are provided by the library:
 
-In order to disable logging at compile time, pass $(D DisableLogger) as a
-version argument to the $(D D) compiler.
+$(LI StdIOLogger, logs data to $(D stdout).)
+$(LI FileLogger, logs data to files.)
+$(LI MulitLogger, logs data to multiple $(D Logger)s.)
+$(LI NullLogger, does nothing.)
+$(LI TemplateLogger, base logger to create simple custom loggers.)
+
+In order to disable all logging at compile time, pass $(D DisableLogging) as a
+version argument to the compiler.
 */
 module std.logger.core;
 
